@@ -782,18 +782,26 @@ function ProfileScreen({ profile, setProfile, goals, sessions, moodLogs, onImpor
     const reader = new FileReader();
     reader.onload = evt => {
       try {
-        const data = JSON.parse(evt.target.result);
+        // Strip BOM and trim whitespace before parsing
+        const raw = evt.target.result.replace(/^\uFEFF/, "").trim();
+        const data = JSON.parse(raw);
+        if (typeof data !== "object" || data === null) throw new Error("not an object");
         onImport(data);
         setImportMsg("Imported ✓");
-      } catch {
-        setImportMsg("Invalid file");
+      } catch(err) {
+        console.error("KORA import error:", err.message);
+        setImportMsg("Try again");
       } finally {
         setImporting(false);
-        setTimeout(()=>setImportMsg(null), 3000);
+        setTimeout(()=>setImportMsg(null), 4000);
         e.target.value = "";
       }
     };
-    reader.readAsText(file);
+    reader.onerror = () => {
+      setImportMsg("Could not read file");
+      setImporting(false);
+    };
+    reader.readAsText(file, "UTF-8");
   };
 
   return (
