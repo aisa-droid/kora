@@ -10,7 +10,7 @@
 //   export default function App() { return <KORAApp />; }
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, createRef } from "react";
 import {
   callKORA, save, load, exportData,
   KORA_SYSTEM, MOODLETS, MOOD_FALLBACKS, TX_FALLBACKS,
@@ -760,9 +760,12 @@ function TransmissionScreen({ moodLogs, sessions, goals, profile, memory }) {
 }
 
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
-function ProfileScreen({ profile, setProfile, goals, sessions, moodLogs }) {
-  const [form, setForm]   = useState(profile||{});
-  const [saved, setSaved] = useState(false);
+function ProfileScreen({ profile, setProfile, goals, sessions, moodLogs, onImport }) {
+  const [form, setForm]       = useState(profile||{});
+  const [saved, setSaved]     = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+  const fileRef = useRef(null);
   const metrics = computeMetrics(goals, sessions);
   const intColor = metrics.integrity===null?"#3A3840":metrics.integrity>=80?"#7EC87E":metrics.integrity>=50?"#F0C97A":"#E8906A";
 
@@ -770,6 +773,27 @@ function ProfileScreen({ profile, setProfile, goals, sessions, moodLogs }) {
     setProfile(form);
     setSaved(true);
     setTimeout(()=>setSaved(false),2000);
+  };
+
+  const handleImport = e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        onImport(data);
+        setImportMsg("Imported ✓");
+      } catch {
+        setImportMsg("Invalid file");
+      } finally {
+        setImporting(false);
+        setTimeout(()=>setImportMsg(null), 3000);
+        e.target.value = "";
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -831,10 +855,15 @@ function ProfileScreen({ profile, setProfile, goals, sessions, moodLogs }) {
             <textarea value={form.creativeGoals||""} onChange={e=>setForm(f=>({...f,creativeGoals:e.target.value}))} placeholder="What are you building toward?" style={{ ...taSt(80),fontFamily:"'Playfair Display',serif",fontStyle:"italic" }}/>
           </div>
         </div>
-        <div style={{ display:"flex",gap:9 }}>
+        <div style={{ display:"flex",gap:9,marginBottom:9 }}>
           <button onClick={save_} style={{ flex:1,background:"rgba(255,255,255,0.055)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,padding:"11px",fontFamily:"'DM Sans',sans-serif",fontSize:".58rem",fontWeight:300,letterSpacing:".2em",textTransform:"uppercase",color:saved?"#7EC87E":"#EEE9E0",cursor:"pointer",transition:"all .3s" }}>{saved?"Saved ✓":"Save changes"}</button>
           <button onClick={exportData} style={{ background:"none",border:"1px solid rgba(255,255,255,0.07)",borderRadius:10,padding:"11px 18px",fontFamily:"'DM Sans',sans-serif",fontSize:".58rem",fontWeight:300,letterSpacing:".16em",textTransform:"uppercase",color:"#3A3840",cursor:"pointer",transition:"all .2s" }} onMouseEnter={e=>e.currentTarget.style.color="#EEE9E0"} onMouseLeave={e=>e.currentTarget.style.color="#3A3840"} title="Export all data as JSON">Export</button>
         </div>
+        {/* Import */}
+        <input ref={fileRef} type="file" accept=".json" onChange={handleImport} style={{ display:"none" }}/>
+        <button onClick={()=>fileRef.current?.click()} disabled={importing} style={{ width:"100%",background:"rgba(255,255,255,0.02)",border:"1px dashed rgba(255,255,255,0.09)",borderRadius:10,padding:"11px",fontFamily:"'DM Sans',sans-serif",fontSize:".58rem",fontWeight:300,letterSpacing:".18em",textTransform:"uppercase",color:importMsg?.includes("✓")?"#7EC87E":importMsg?"#E8906A":"#3A3840",cursor:"pointer",transition:"all .3s" }} onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(255,255,255,0.18)"} onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(255,255,255,0.09)"}>
+          {importing?"Reading…":importMsg||"Import backup (JSON)"}
+        </button>
       </Reveal>
     </div>
   );
@@ -885,6 +914,18 @@ export default function KORAApp() {
     setProfile({ name, creativeGoals });
     if (initGoals?.length) setGoals(initGoals);
     setOnboarded(true);
+  };
+
+  // ── Import handler ───────────────────────────────────────────────────────
+  const handleImport = data => {
+    const keys = ["kora-profile","goals","sessions","mood-logs","journal-entries","milestones"];
+    keys.forEach(k => { if (data[k] != null) save(k, data[k]); });
+    if (data["kora-profile"]) { setProfileState(data["kora-profile"]); setOnboarded(true); }
+    if (data["goals"])              setGoalsState(data["goals"]);
+    if (data["sessions"])           setSessionsState(data["sessions"]);
+    if (data["mood-logs"])          setMoodLogsState(data["mood-logs"]);
+    if (data["journal-entries"])    setJournalState(data["journal-entries"]);
+    if (data["milestones"])         setMilestonesState(data["milestones"]);
   };
 
   // ── Session flow ──────────────────────────────────────────────────────────
@@ -942,9 +983,9 @@ export default function KORAApp() {
       <div style={{ display:"flex",minHeight:"100vh" }}>
 
         {/* Sidebar */}
-        <aside style={{ width: window.innerWidth < 768 ? 120 : 196,flexShrink:0,background:"#060610",borderRight:"1px solid rgba(255,255,255,0.042)",display:"flex",flexDirection:"column",position:"sticky",top:0,height:"100vh",overflowY:"auto" }}>
+        <aside style={{ width:196,flexShrink:0,background:"#060610",borderRight:"1px solid rgba(255,255,255,0.042)",display:"flex",flexDirection:"column",position:"sticky",top:0,height:"100vh",overflowY:"auto" }}>
           {/* Brand */}
-          <div style={{ padding: window.innerWidth < 768 ? "16px 12px 12px" : "28px 24px 20px" }}>
+          <div style={{ padding:"28px 24px 20px" }}>
             <div style={{ fontFamily:"'Playfair Display',serif",fontSize:"1.25rem",fontWeight:300,letterSpacing:".38em",color:"#EEE9E0" }}>KORA</div>
             <div style={{ fontSize:".38rem",fontWeight:300,letterSpacing:".28em",textTransform:"uppercase",color:"#1a1828",marginTop:2 }}>Creative OS</div>
           </div>
@@ -1031,6 +1072,7 @@ export default function KORAApp() {
             <ProfileScreen
               profile={profile} setProfile={setProfile}
               goals={goals} sessions={sessions} moodLogs={moodLogs}
+              onImport={handleImport}
             />
           )}
         </main>
