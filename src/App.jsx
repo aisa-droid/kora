@@ -1,5 +1,5 @@
-import KoraPart1 from ".components/KORA-v8.1.1-part1"
-import KoraPart2 from ".components/KORA-v8.1.1-part2"
+import KoraPart1 from ".components/KORA-v8.1.1-part1.jsx"
+import KoraPart2 from ".components/KORA-v8.1.1-part2.jsx"
 
 export default function App() {
   return (
